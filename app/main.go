@@ -57,15 +57,15 @@ func main() {
 		err := db.QueryRow("SELECT NOW()").Scan(&currentTime)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"status": "error",
+				"status":  "error",
 				"message": "Database query failed",
 			})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"status": "healthy",
-			"database": "connected",
+			"status":        "healthy",
+			"database":      "connected",
 			"database_time": currentTime,
 		})
 	})
