@@ -5,3 +5,6 @@
 *.log
 .vscode/
 .idea/
+
+*.pem
+auth/keys/
