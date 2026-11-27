@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -32,23 +33,47 @@ func main() {
 	defer db.Close()
 
 	// Check the database connection
-	if err := db.Ping(); err != nil {
-		fmt.Println("Could not connect to PostgreSQL:", err)
+	var pingErr error
+	for attempt := 1; attempt <= 15; attempt++ {
+		pingErr = db.Ping()
+		if pingErr == nil {
+			break
+		}
+		fmt.Printf("Waiting for PostgreSQL (attempt %d/15): %v\n", attempt, pingErr)
+		time.Sleep(1 * time.Second)
+	}
+	if pingErr != nil {
+		fmt.Println("Could not connect to PostgreSQL:", pingErr)
 		return
 	}
 
 	fmt.Println("Successfully connected to PostgreSQL!")
 
+	publicKeyURL := os.Getenv("AUTH_PUBLIC_KEY_URL")
+	if publicKeyURL == "" {
+		publicKeyURL = "http://auth:8081/public-key"
+	}
+
+	pubKey, err := fetchPublicKeyWithRetry(publicKeyURL)
+	if err != nil {
+		fmt.Println("Public key error:", err)
+		return
+	}
+	fmt.Println("Successfully loaded RS256 public key from auth service!")
+
 	// Set up the web application
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	router.LoadHTMLFiles("templates/index.html")
+	router.LoadHTMLFiles(
+		"templates/index.html",
+		"templates/login.html",
+		"templates/register.html",
+	)
 
-	// Homepage
-	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", nil)
-	})
+	router.GET("/login", loginPageHandler)
+	router.GET("/register", registerPageHandler)
+	router.GET("/", homePageHandler(pubKey))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

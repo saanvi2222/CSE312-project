@@ -223,6 +223,7 @@ func isValidPassword(pw string) bool {
 	return hasLower && hasUpper && hasDigit && hasSpecial
 }
 
+// logs out a user
 func logoutHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Clear cookie if you use one (adjust cookie name, path, domain, and Secure flag to match login)
