@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account — Office Hours Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #14151F;
+      color: #14151F;
+      min-height: 100vh;
+    }
+
+    .auth-shell {
+      min-height: 100vh;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+    }
+
+    /* Left dark studio panel */
+    .brand-pane {
+      position: relative;
+      background: #14151F;
+      color: #FFFFFF;
+      padding: 44px 56px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      isolation: isolate;
+      border-right: 2px solid #14151F;
+    }
+    .ambient-glow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      filter: blur(72px);
+      opacity: 0.75;
+    }
+    .glow-mint {
+      position: absolute;
+      left: -40px;
+      bottom: 8%;
+      width: 380px;
+      height: 260px;
+      border-radius: 999px;
+      background: rgba(46, 229, 197, 0.32);
+    }
+    .glow-violet {
+      position: absolute;
+      right: -30px;
+      top: 14%;
+      width: 380px;
+      height: 260px;
+      border-radius: 999px;
+      background: rgba(139, 92, 246, 0.34);
+    }
+
+    .brand-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: -0.025em;
+      color: #FFFFFF;
+      text-decoration: none;
+    }
+    .logo-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: #2EE5C5;
+      color: #14151F;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .back-link {
+      font-size: 13px;
+      font-weight: 700;
+      color: #C7CCD9;
+      text-decoration: none;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1.5px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.05);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .back-link:hover {
+      color: #FFFFFF;
+      border-color: #2EE5C5;
+    }
+
+    .brand-copy {
+      max-width: 480px;
+      margin: 40px 0;
+    }
+    .eyebrow {
+      display: inline-block;
+      background: rgba(167, 139, 250, 0.16);
+      border: 1.5px solid rgba(167, 139, 250, 0.45);
+      color: #DDD6FE;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+    .brand-copy h1 {
+      font-size: clamp(34px, 3.8vw, 52px);
+      font-weight: 800;
+      line-height: 1.07;
+      letter-spacing: -0.035em;
+      margin-bottom: 18px;
+    }
+    .brand-copy p {
+      font-size: 16px;
+      line-height: 1.65;
+      color: #C7CCD9;
+    }
+
+    .sticker-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .sticker {
+      width: 92px;
+      height: 62px;
+      border-radius: 18px;
+      border: 2px solid #14151F;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 5px 0 rgba(0, 0, 0, 0.45);
+    }
+    .sticker-mint {
+      background: #2EE5C5;
+      color: #14151F;
+    }
+    .sticker-indigo {
+      background: #1E1F36;
+      border-color: rgba(255, 255, 255, 0.18);
+      color: #2EE5C5;
+    }
+
+    /* Right light form panel */
+    .form-pane {
+      background:
+        radial-gradient(circle at 1px 1px, rgba(20, 21, 31, 0.06) 1px, transparent 0),
+        #FAF9FF;
+      background-size: 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 32px;
+    }
+    .form-card {
+      width: 100%;
+      max-width: 440px;
+      background: #FFFFFF;
+      border: 2px solid #14151F;
+      border-radius: 26px;
+      padding: 36px 34px;
+      box-shadow: 0 8px 0 #14151F;
+    }
+    .form-card h2 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .form-subtitle {
+      font-size: 14.5px;
+      color: #525866;
+      margin-bottom: 26px;
+      line-height: 1.5;
+    }
+    .field {
+      margin-bottom: 18px;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: #14151F;
+    }
+    .field input {
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 14px;
+      border: 2px solid #14151F;
+      background: #FAF9FF;
+      font-family: inherit;
+      font-size: 15px;
+      color: #14151F;
+      outline: none;
+      transition: background 0.12s, box-shadow 0.12s, transform 0.12s;
+    }
+    .field input:focus {
+      background: #FFFFFF;
+      box-shadow: 0 4px 0 #14151F;
+      transform: translateY(-1px);
+    }
+
+    .status-msg {
+      display: none;
+      font-size: 13.5px;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .status-msg.error {
+      display: block;
+      background: #FEF2F2;
+      border: 1.5px solid #DC2626;
+      color: #991B1B;
+    }
+    .status-msg.success {
+      display: block;
+      background: #ECFDF5;
+      border: 1.5px solid #059669;
+      color: #065F46;
+    }
+
+    .btn-submit {
+      width: 100%;
+      margin-top: 6px;
+      padding: 14px 22px;
+      border-radius: 999px;
+      background: #2EE5C5;
+      color: #14151F;
+      border: 2px solid #14151F;
+      box-shadow: 0 4px 0 #14151F;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .btn-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 0 #14151F;
+    }
+    .btn-submit:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #14151F;
+    }
+
+    .switch-row {
+      margin-top: 22px;
+      text-align: center;
+      font-size: 14px;
+      color: #525866;
+    }
+    .switch-row a {
+      color: #14151F;
+      font-weight: 800;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    @media (max-width: 900px) {
+      .auth-shell {
+        grid-template-columns: 1fr;
+      }
+      .brand-pane {
+        padding: 32px 24px;
+        border-right: none;
+        border-bottom: 2px solid #14151F;
+      }
+      .brand-copy {
+        margin: 26px 0 22px;
+      }
+      .form-pane {
+        padding: 32px 20px 48px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-shell">
+    <section class="brand-pane">
+      <div class="ambient-glow" aria-hidden="true">
+        <div class="glow-mint"></div>
+        <div class="glow-violet"></div>
+      </div>
+
+      <div class="brand-top">
+        <a href="/" class="logo">
+          <span class="logo-badge">✦</span>
+          <span>Office Hours Studio</span>
+        </a>
+        <a href="/" class="back-link">← Home</a>
+      </div>
+
+      <div class="brand-copy">
+        <span class="eyebrow">New Account</span>
+        <h1>Join TA office hours in seconds.</h1>
+        <p>Create an account to check into open office hours rooms, drop help pins, and work through problems live.</p>
+      </div>
+
+      <div class="sticker-row" aria-hidden="true">
+        <div class="sticker sticker-mint">
+          <svg width="36" height="24" viewBox="0 0 36 24" fill="none">
+            <circle cx="10" cy="10" r="3.2" stroke="#14151F" stroke-width="2"/>
+            <circle cx="26" cy="10" r="3.2" stroke="#14151F" stroke-width="2"/>
+            <path d="M14 15.5C15.6 17.5 20.4 17.5 22 15.5" stroke="#14151F" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="sticker sticker-indigo">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <circle cx="13" cy="13" r="10" stroke="#2EE5C5" stroke-width="2"/>
+            <path d="M8.8 13.3L11.6 16.1L17.4 10.3" stroke="#2EE5C5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <main class="form-pane">
+      <div class="form-card">
+        <h2>Create Account</h2>
+        <p class="form-subtitle">Set up your username and password to get started.</p>
+
+        <div id="statusMsg" class="status-msg" role="alert"></div>
+
+        <form id="registerForm">
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username" required />
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" required />
+          </div>
+
+          <button type="submit" class="btn-submit">Create Account</button>
+        </form>
+
+        <p class="switch-row">
+          Already have an account? <a href="/login">Sign in</a>
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const registerForm = document.getElementById('registerForm');
+    const statusMsg = document.getElementById('statusMsg');
+
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusMsg.className = 'status-msg';
+      statusMsg.textContent = '';
+
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const res = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          statusMsg.textContent = data.error || 'Could not create account';
+          statusMsg.className = 'status-msg error';
+          return;
+        }
+        statusMsg.textContent = 'Account created! Redirecting to sign in...';
+        statusMsg.className = 'status-msg success';
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 700);
+      } catch (err) {
+        statusMsg.textContent = 'Could not reach server. Please try again.';
+        statusMsg.className = 'status-msg error';
+      }
+    });
+  </script>
+</body>
+</html>
