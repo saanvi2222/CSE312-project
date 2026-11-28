@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 )
@@ -88,6 +90,25 @@ func (c *Client) ReadPump(hub *Hub) { // reads messages from this browser and ac
 			}
 			hub.AddStroke(stroke)
 			hub.Broadcast(stroke, c.SocketID)
+
+		case "text":
+			content := strings.TrimSpace(msg.Text)
+			length := utf8.RuneCountInString(content)
+			if !onBoard(msg.X, msg.Y) || length == 0 || length > 200 ||
+				msg.Size < 12 || msg.Size > 64 || !colorPattern.MatchString(msg.Color) {
+				continue
+			}
+			text := TextMessage{
+				MessageType: "text",
+				Username:    c.Username, // from the JWT, never the client
+				X:           msg.X,
+				Y:           msg.Y,
+				Text:        content,
+				Color:       msg.Color,
+				Size:        msg.Size,
+			}
+			hub.AddText(text)
+			hub.Broadcast(text, c.SocketID)
 
 		case "erase":
 			if !onBoard(msg.X, msg.Y) || msg.Radius < 5 || msg.Radius > 60 {

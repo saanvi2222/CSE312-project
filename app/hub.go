@@ -5,18 +5,21 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"unicode/utf8"
 )
 
 const (
 	BoardWidth  = 1600
 	BoardHeight = 900
 	MaxStrokes  = 50000 // cap the history
+	MaxTexts    = 2000  // cap the number of text boxes
 )
 
 type Hub struct {
 	Mu      sync.RWMutex
 	Clients map[string]*Client //unique socket id
 	Strokes []DrawingMessage
+	Texts   []TextMessage // every piece of text on the board
 }
 
 func NewHub() *Hub {
@@ -28,10 +31,12 @@ func (h *Hub) Register(client *Client) { //adds a client, sends them the current
 	h.Clients[client.SocketID] = client
 	history := make([]DrawingMessage, len(h.Strokes))
 	copy(history, h.Strokes)
+	texts := make([]TextMessage, len(h.Texts))
+	copy(texts, h.Texts)
 	h.Mu.Unlock()
 
 	client.SendJSON(WelcomeMessage{MessageType: "welcome", Username: client.Username})
-	client.SendJSON(InitStrokesMessage{MessageType: "init_strokes", Strokes: history})
+	client.SendJSON(InitStrokesMessage{MessageType: "init_strokes", Strokes: history, Texts: texts})
 	h.BroadcastActiveUsers()
 }
 
@@ -81,7 +86,30 @@ func (h *Hub) EraseNear(x, y, radius float64) { //removes every segment that pas
 		}
 	}
 	h.Strokes = kept
+
+	keptTexts := h.Texts[:0]
+	for _, t := range h.Texts {
+		if !textNear(t, x, y, radius) {
+			keptTexts = append(keptTexts, t)
+		}
+	}
+	h.Texts = keptTexts
 	h.Mu.Unlock()
+}
+
+func (h *Hub) AddText(text TextMessage) { //saves text so people who join later can see it
+	h.Mu.Lock()
+	if len(h.Texts) < MaxTexts {
+		h.Texts = append(h.Texts, text)
+	}
+	h.Mu.Unlock()
+}
+
+func textNear(t TextMessage, x, y, radius float64) bool { //is (x, y) within radius of the text's box? board.html uses the same estimate
+	width := float64(utf8.RuneCountInString(t.Text)) * t.Size * 0.6 // estimated width: about 0.6 x font size per character
+	closestX := math.Max(t.X, math.Min(x, t.X+width))
+	closestY := math.Max(t.Y, math.Min(y, t.Y+t.Size))
+	return math.Hypot(x-closestX, y-closestY) <= radius
 }
 
 func distanceToSegment(px, py, ax, ay, bx, by float64) float64 { //shortest distance from point (px, py) to the segment (ax, ay)-(bx, by)

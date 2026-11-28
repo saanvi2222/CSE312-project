@@ -7,6 +7,7 @@
         body { margin: 0; font-family: sans-serif; background: #1e1e2e; color: #eee; }
         #bar { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: #2a2a3d; flex-wrap: wrap; }
         .tool { padding: 4px 10px; border-radius: 6px; border: 1px solid #555; background: #3a3a50; color: #eee; cursor: pointer; }
+        #textInput { position: absolute; z-index: 5; min-width: 160px; padding: 2px 4px; border: 2px dashed #0f766e; background: rgba(255,255,255,0.9); font-family: sans-serif; outline: none; }
         .tool.active { background: #0f766e; border-color: #0f766e; }
         .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
         #layout { display: flex; gap: 12px; padding: 12px; }
@@ -35,12 +36,19 @@
     <span>Tool:</span>
     <button id="penBtn" class="tool active">✏️ Pen</button>
     <button id="eraserBtn" class="tool">🧽 Eraser</button>
+    <button id="textBtn" class="tool">🔤 Text</button>
+    <select id="textSize" title="Text size">
+        <option value="16">Small</option>
+        <option value="24" selected>Medium</option>
+        <option value="40">Large</option>
+    </select>
 </div>
 
 <div id="layout">
     <div id="wrap">
         <canvas id="canvas" width="1600" height="900"></canvas>
         <div id="cursors"></div>
+        <input id="textInput" type="text" maxlength="200" placeholder="Type, then Enter" hidden>
     </div>
     <div id="users">
         <h3>On this board</h3>
@@ -62,7 +70,8 @@
     let isDrawing = false;
     let lastX = null, lastY = null;
     const strokes = []; // every segment on the board, so we can redraw after an erase
-    let tool = "pen"; // "pen" or "eraser"
+    const texts = []; // every piece of text on the board
+    let tool = "pen"; // "pen", "eraser" or "text"
     const ERASE_RADIUS = 20; // must be between 5 and 60 (checked in client.go)
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -84,9 +93,13 @@
                 break;
             case "init_strokes":
                 data.strokes.forEach(s => addStroke(s));
+                (data.texts || []).forEach(t => addText(t));
                 break;
             case "drawing":
                 addStroke(data);
+                break;
+            case "text": // someone placed text
+                addText(data);
                 break;
             case "erase": // someone (maybe someone else) erased part of the board
                 eraseNear(data.x, data.y, data.radius);
@@ -127,6 +140,25 @@
         drawLine(s.startX, s.startY, s.endX, s.endY, s.color);
     }
 
+    function drawText(t) { // draws text with its top-left corner at (x, y)
+        ctx.font = `${t.size}px sans-serif`;
+        ctx.textBaseline = "top";
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, t.x, t.y); // canvas text is never parsed as HTML
+    }
+
+    function addText(t) { // remember a piece of text and draw it
+        texts.push(t);
+        drawText(t);
+    }
+
+    function textNear(t, x, y, radius) { // same estimate as textNear in hub.go
+        const width = [...t.text].length * t.size * 0.6;
+        const closestX = Math.max(t.x, Math.min(x, t.x + width));
+        const closestY = Math.max(t.y, Math.min(y, t.y + t.size));
+        return Math.hypot(x - closestX, y - closestY) <= radius;
+    }
+
     function distanceToSegment(px, py, ax, ay, bx, by) { // same math as distanceToSegment in hub.go
         const dx = bx - ax, dy = by - ay;
         const lengthSq = dx * dx + dy * dy;
@@ -147,15 +179,61 @@
                 removed = true;
             }
         }
+        for (let i = texts.length - 1; i >= 0; i--) {
+            if (textNear(texts[i], x, y, radius)) {
+                texts.splice(i, 1);
+                removed = true;
+            }
+        }
         if (removed) redraw();
     }
 
     function redraw() { // clear the canvas and draw every remaining segment
         ctx.clearRect(0, 0, BOARD_W, BOARD_H);
         strokes.forEach(s => drawLine(s.startX, s.startY, s.endX, s.endY, s.color));
+        texts.forEach(t => drawText(t));
     }
 
+    // ---------- Text tool ----------
+    const textInput = document.getElementById("textInput");
+    let textSpot = null; // board coordinates where the text will go
+
+    function openTextInput(p) { // show a text box where the user clicked
+        textSpot = p;
+        textInput.style.left = (p.x / BOARD_W * 100) + "%";
+        textInput.style.top = (p.y / BOARD_H * 100) + "%";
+        textInput.value = "";
+        textInput.hidden = false;
+        setTimeout(() => textInput.focus(), 0);
+    }
+
+    function closeTextInput() {
+        textInput.hidden = true;
+        textSpot = null;
+    }
+
+    textInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") return closeTextInput();
+        if (e.key !== "Enter") return;
+        const content = textInput.value.trim();
+        if (content && textSpot) {
+            const t = {
+                x: textSpot.x, y: textSpot.y, text: content, color: currentColor,
+                size: Number(document.getElementById("textSize").value),
+            };
+            addText(t); // show it right away
+            send({ messageType: "text", ...t });
+        }
+        closeTextInput();
+    });
+    textInput.addEventListener("blur", closeTextInput); // clicking away cancels
+
     canvas.addEventListener("mousedown", (e) => {
+        if (tool === "text") { // the text tool places a text box instead of drawing
+            e.preventDefault(); // keep focus from jumping back to the canvas
+            openTextInput(toBoard(e));
+            return;
+        }
         isDrawing = true;
         const p = toBoard(e);
         lastX = p.x; lastY = p.y;
@@ -237,10 +315,12 @@
         tool = newTool;
         document.getElementById("penBtn").classList.toggle("active", tool === "pen");
         document.getElementById("eraserBtn").classList.toggle("active", tool === "eraser");
-        canvas.style.cursor = tool === "eraser" ? "cell" : "crosshair";
+        document.getElementById("textBtn").classList.toggle("active", tool === "text");
+        canvas.style.cursor = tool === "eraser" ? "cell" : tool === "text" ? "text" : "crosshair";
     }
     document.getElementById("penBtn").addEventListener("click", () => setTool("pen"));
     document.getElementById("eraserBtn").addEventListener("click", () => setTool("eraser"));
+    document.getElementById("textBtn").addEventListener("click", () => setTool("text"));
 </script>
 </body>
 </html>
