@@ -69,11 +69,17 @@ func main() {
 		"templates/index.html",
 		"templates/login.html",
 		"templates/register.html",
+		"templates/board.html", // NEW
 	)
 
 	router.GET("/login", loginPageHandler)
 	router.GET("/register", registerPageHandler)
 	router.GET("/", homePageHandler(pubKey))
+
+	//ive whiteboard
+	hub := NewHub()
+	router.GET("/board", BoardPageHandler(pubKey))
+	router.GET("/ws", WebSocketHandler(hub, pubKey))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

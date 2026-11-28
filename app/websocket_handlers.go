@@ -2,11 +2,10 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/rsa"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -23,10 +22,26 @@ func GenerateRandomSocketID() string {
 	return hex.EncodeToString(b)
 }
 
-var guestCounter atomic.Int64 //everyone is a numbered guest
+func usernameFromRequest(c *gin.Context, pubKey *rsa.PublicKey) (string, bool) { // reads the token cookie and verifies the JWT with the auth server's public key (no auth server or database call)
+	tokenCookie, err := c.Cookie("token")
+	if err != nil || tokenCookie == "" {
+		return "", false
+	}
+	username, err := verifyToken(tokenCookie, pubKey) // rejects bad signatures, other algorithms, and expired tokens
+	if err != nil {
+		return "", false
+	}
+	return username, true
+}
 
-func WebSocketHandler(hub *Hub) gin.HandlerFunc { // upgrades GET /ws to a WebSocket and starts the client
+func WebSocketHandler(hub *Hub, pubKey *rsa.PublicKey) gin.HandlerFunc { // upgrades GET /ws to a WebSocket and starts the client
 	return func(c *gin.Context) {
+		username, ok := usernameFromRequest(c, pubKey) // check the JWT before accepting the connection
+		if !ok {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			log.Println("websocket upgrade failed:", err)
@@ -35,7 +50,7 @@ func WebSocketHandler(hub *Hub) gin.HandlerFunc { // upgrades GET /ws to a WebSo
 
 		client := &Client{
 			Conn:     conn,
-			Username: fmt.Sprintf("guest-%d", guestCounter.Add(1)),
+			Username: username, // from the verified JWT, so a user can never act as someone else
 			SocketID: GenerateRandomSocketID(),
 			Send:     make(chan []byte, 256),
 		}
@@ -46,6 +61,12 @@ func WebSocketHandler(hub *Hub) gin.HandlerFunc { // upgrades GET /ws to a WebSo
 	}
 }
 
-func BoardPageHandler(c *gin.Context) { // serves the whiteboard page
-	c.HTML(http.StatusOK, "board.html", nil)
+func BoardPageHandler(pubKey *rsa.PublicKey) gin.HandlerFunc { // serves the whiteboard page, only to logged-in users
+	return func(c *gin.Context) {
+		if _, ok := usernameFromRequest(c, pubKey); !ok {
+			c.Redirect(http.StatusFound, "/login")
+			return
+		}
+		c.HTML(http.StatusOK, "board.html", nil)
+	}
 }
