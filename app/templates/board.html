@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Whiteboard</title>
+    <style>
+        body { margin: 0; font-family: sans-serif; background: #1e1e2e; color: #eee; }
+        #bar { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: #2a2a3d; flex-wrap: wrap; }
+        .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
+        #layout { display: flex; gap: 12px; padding: 12px; }
+        /* The wrapper keeps the 16:9 board shape at any window size */
+        #wrap { position: relative; flex: 1; aspect-ratio: 16 / 9; max-height: calc(100vh - 80px); }
+        #canvas { width: 100%; height: 100%; background: #fff; border-radius: 6px; cursor: crosshair; display: block; }
+        #cursors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+        .cursor { position: absolute; transform: translate(-5px, -5px); white-space: nowrap; }
+        .cursor .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+        .cursor .label { font-size: 12px; color: #fff; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+        #users { width: 180px; background: #2a2a3d; border-radius: 6px; padding: 10px; }
+        #users h3 { margin: 0 0 8px; font-size: 14px; }
+        #userList { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div id="bar">
+    <span>You are <b id="me">connecting...</b></span>
+    <span id="status">connecting</span>
+    <span>Color:</span>
+    <div class="swatch" style="background:#000000" data-color="#000000"></div>
+    <div class="swatch" style="background:#e53935" data-color="#e53935"></div>
+    <div class="swatch" style="background:#1e88e5" data-color="#1e88e5"></div>
+    <div class="swatch" style="background:#43a047" data-color="#43a047"></div>
+    <input type="color" id="colorPicker" value="#000000">
+</div>
+
+<div id="layout">
+    <div id="wrap">
+        <canvas id="canvas" width="1600" height="900"></canvas>
+        <div id="cursors"></div>
+    </div>
+    <div id="users">
+        <h3>On this board</h3>
+        <ul id="userList"></ul>
+    </div>
+</div>
+
+<script>
+    const BOARD_W = 1600, BOARD_H = 900;
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    const cursorLayer = document.getElementById("cursors");
+    const colorPicker = document.getElementById("colorPicker");
+    const cursors = {};
+    let myName = null;
+    let currentColor = "#000000";
+    let isDrawing = false;
+    let lastX = null, lastY = null;
+
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const statusEl = document.getElementById("status");
+    ws.onopen = () => statusEl.textContent = "connected";
+    ws.onclose = () => statusEl.textContent = "disconnected (refresh to reconnect)";
+
+    function send(msg) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    }
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        switch (data.messageType) {
+            case "welcome":
+                myName = data.username;
+                document.getElementById("me").textContent = myName;
+                break;
+            case "init_strokes":
+                data.strokes.forEach(s => drawLine(s.startX, s.startY, s.endX, s.endY, s.color));
+                break;
+            case "drawing":
+                drawLine(data.startX, data.startY, data.endX, data.endY, data.color);
+                break;
+            case "cursor":
+                moveCursor(data.username, data.x, data.y);
+                break;
+            case "user_left":
+                if (cursors[data.username]) {
+                    cursors[data.username].remove();
+                    delete cursors[data.username];
+                }
+                break;
+            case "active_users_list":
+                updateUserList(data.users);
+                break;
+        }
+    };
+
+    function toBoard(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: Math.round((e.clientX - rect.left) / rect.width * BOARD_W),
+            y: Math.round((e.clientY - rect.top) / rect.height * BOARD_H),
+        };
+    }
+
+    function drawLine(startX, startY, endX, endY, color) {
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+    }
+
+    canvas.addEventListener("mousedown", (e) => {
+        isDrawing = true;
+        const p = toBoard(e);
+        lastX = p.x; lastY = p.y;
+    });
+
+    function stopDrawing() {
+        isDrawing = false;
+        lastX = lastY = null;
+    }
+    canvas.addEventListener("mouseup", stopDrawing);
+    canvas.addEventListener("mouseleave", stopDrawing);
+
+    let lastCursorSent = 0;
+    canvas.addEventListener("mousemove", (e) => {
+        const p = toBoard(e);
+
+        const now = Date.now();
+        if (now - lastCursorSent >= 30) {
+            lastCursorSent = now;
+            send({ messageType: "cursor", x: p.x, y: p.y });
+        }
+
+        if (isDrawing) {
+            drawLine(lastX, lastY, p.x, p.y, currentColor);
+            send({ messageType: "drawing", startX: lastX, startY: lastY, endX: p.x, endY: p.y, color: currentColor });
+            lastX = p.x; lastY = p.y;
+        }
+    });
+
+    function colorFor(name) {
+        let h = 0;
+        for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+        return `hsl(${h}, 70%, 45%)`;
+    }
+
+    function moveCursor(user, x, y) {
+        if (!cursors[user]) {
+            const el = document.createElement("div");
+            el.className = "cursor";
+            const dot = document.createElement("span");
+            dot.className = "dot";
+            dot.style.background = colorFor(user);
+            const label = document.createElement("span");
+            label.className = "label";
+            label.style.background = colorFor(user);
+            label.textContent = user;
+            el.append(dot, label);
+            cursorLayer.appendChild(el);
+            cursors[user] = el;
+        }
+        cursors[user].style.left = (x / BOARD_W * 100) + "%";
+        cursors[user].style.top = (y / BOARD_H * 100) + "%";
+    }
+
+    function updateUserList(users) {
+        const list = document.getElementById("userList");
+        list.replaceChildren();
+        users.forEach(u => {
+            const li = document.createElement("li");
+            li.textContent = u === myName ? `${u} (you)` : u;
+            li.style.color = colorFor(u);
+            list.appendChild(li);
+        });
+    }
+
+    function setColor(color) {
+        currentColor = color;
+        colorPicker.value = color;
+    }
+    document.querySelectorAll(".swatch").forEach(s =>
+        s.addEventListener("click", () => setColor(s.dataset.color)));
+    colorPicker.addEventListener("input", (e) => currentColor = e.target.value);
+</script>
+</body>
+</html>
