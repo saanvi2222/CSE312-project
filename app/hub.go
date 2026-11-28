@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math"
 	"sort"
 	"sync"
 )
@@ -69,6 +70,30 @@ func (h *Hub) AddStroke(stroke DrawingMessage) { // saves a segment so people wh
 		h.Strokes = append(h.Strokes, stroke)
 	}
 	h.Mu.Unlock()
+}
+
+func (h *Hub) EraseNear(x, y, radius float64) { //removes every segment that passes within radius of (x, y); board.html runs the same check
+	h.Mu.Lock()
+	kept := h.Strokes[:0]
+	for _, s := range h.Strokes {
+		if distanceToSegment(x, y, s.StartX, s.StartY, s.EndX, s.EndY) > radius {
+			kept = append(kept, s)
+		}
+	}
+	h.Strokes = kept
+	h.Mu.Unlock()
+}
+
+func distanceToSegment(px, py, ax, ay, bx, by float64) float64 { //shortest distance from point (px, py) to the segment (ax, ay)-(bx, by)
+	dx, dy := bx-ax, by-ay
+	lengthSq := dx*dx + dy*dy
+	t := 0.0
+	if lengthSq > 0 {
+		t = ((px-ax)*dx + (py-ay)*dy) / lengthSq
+		t = math.Max(0, math.Min(1, t)) // stay on the segment, not the infinite line
+	}
+	cx, cy := ax+t*dx, ay+t*dy // closest point on the segment
+	return math.Hypot(px-cx, py-cy)
 }
 
 func (h *Hub) BroadcastActiveUsers() { //sends everyone the list of unique usernames.

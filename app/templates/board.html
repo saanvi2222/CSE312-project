@@ -6,6 +6,8 @@
     <style>
         body { margin: 0; font-family: sans-serif; background: #1e1e2e; color: #eee; }
         #bar { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: #2a2a3d; flex-wrap: wrap; }
+        .tool { padding: 4px 10px; border-radius: 6px; border: 1px solid #555; background: #3a3a50; color: #eee; cursor: pointer; }
+        .tool.active { background: #0f766e; border-color: #0f766e; }
         .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
         #layout { display: flex; gap: 12px; padding: 12px; }
         /* The wrapper keeps the 16:9 board shape at any window size */
@@ -30,6 +32,9 @@
     <div class="swatch" style="background:#1e88e5" data-color="#1e88e5"></div>
     <div class="swatch" style="background:#43a047" data-color="#43a047"></div>
     <input type="color" id="colorPicker" value="#000000">
+    <span>Tool:</span>
+    <button id="penBtn" class="tool active">✏️ Pen</button>
+    <button id="eraserBtn" class="tool">🧽 Eraser</button>
 </div>
 
 <div id="layout">
@@ -56,6 +61,9 @@
     let currentColor = "#000000";
     let isDrawing = false;
     let lastX = null, lastY = null;
+    const strokes = []; // every segment on the board, so we can redraw after an erase
+    let tool = "pen"; // "pen" or "eraser"
+    const ERASE_RADIUS = 20; // must be between 5 and 60 (checked in client.go)
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -75,10 +83,13 @@
                 document.getElementById("me").textContent = myName;
                 break;
             case "init_strokes":
-                data.strokes.forEach(s => drawLine(s.startX, s.startY, s.endX, s.endY, s.color));
+                data.strokes.forEach(s => addStroke(s));
                 break;
             case "drawing":
-                drawLine(data.startX, data.startY, data.endX, data.endY, data.color);
+                addStroke(data);
+                break;
+            case "erase": // someone (maybe someone else) erased part of the board
+                eraseNear(data.x, data.y, data.radius);
                 break;
             case "cursor":
                 moveCursor(data.username, data.x, data.y);
@@ -111,6 +122,39 @@
         ctx.stroke();
     }
 
+    function addStroke(s) { // remember a segment and draw it
+        strokes.push(s);
+        drawLine(s.startX, s.startY, s.endX, s.endY, s.color);
+    }
+
+    function distanceToSegment(px, py, ax, ay, bx, by) { // same math as distanceToSegment in hub.go
+        const dx = bx - ax, dy = by - ay;
+        const lengthSq = dx * dx + dy * dy;
+        let t = 0;
+        if (lengthSq > 0) {
+            t = ((px - ax) * dx + (py - ay) * dy) / lengthSq;
+            t = Math.max(0, Math.min(1, t));
+        }
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    }
+
+    function eraseNear(x, y, radius) { // removes segments near (x, y) and redraws the board
+        let removed = false;
+        for (let i = strokes.length - 1; i >= 0; i--) {
+            const s = strokes[i];
+            if (distanceToSegment(x, y, s.startX, s.startY, s.endX, s.endY) <= radius) {
+                strokes.splice(i, 1);
+                removed = true;
+            }
+        }
+        if (removed) redraw();
+    }
+
+    function redraw() { // clear the canvas and draw every remaining segment
+        ctx.clearRect(0, 0, BOARD_W, BOARD_H);
+        strokes.forEach(s => drawLine(s.startX, s.startY, s.endX, s.endY, s.color));
+    }
+
     canvas.addEventListener("mousedown", (e) => {
         isDrawing = true;
         const p = toBoard(e);
@@ -134,9 +178,13 @@
             send({ messageType: "cursor", x: p.x, y: p.y });
         }
 
-        if (isDrawing) {
-            drawLine(lastX, lastY, p.x, p.y, currentColor);
-            send({ messageType: "drawing", startX: lastX, startY: lastY, endX: p.x, endY: p.y, color: currentColor });
+        if (isDrawing && tool === "eraser") {
+            eraseNear(p.x, p.y, ERASE_RADIUS); // erase locally right away
+            send({ messageType: "erase", x: p.x, y: p.y, radius: ERASE_RADIUS });
+        } else if (isDrawing) {
+            const seg = { startX: lastX, startY: lastY, endX: p.x, endY: p.y, color: currentColor };
+            addStroke(seg);
+            send({ messageType: "drawing", ...seg });
             lastX = p.x; lastY = p.y;
         }
     });
@@ -184,6 +232,15 @@
     document.querySelectorAll(".swatch").forEach(s =>
         s.addEventListener("click", () => setColor(s.dataset.color)));
     colorPicker.addEventListener("input", (e) => currentColor = e.target.value);
+
+    function setTool(newTool) { // switch between pen and eraser
+        tool = newTool;
+        document.getElementById("penBtn").classList.toggle("active", tool === "pen");
+        document.getElementById("eraserBtn").classList.toggle("active", tool === "eraser");
+        canvas.style.cursor = tool === "eraser" ? "cell" : "crosshair";
+    }
+    document.getElementById("penBtn").addEventListener("click", () => setTool("pen"));
+    document.getElementById("eraserBtn").addEventListener("click", () => setTool("eraser"));
 </script>
 </body>
 </html>

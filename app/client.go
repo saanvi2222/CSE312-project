@@ -88,6 +88,19 @@ func (c *Client) ReadPump(hub *Hub) { // reads messages from this browser and ac
 			}
 			hub.AddStroke(stroke)
 			hub.Broadcast(stroke, c.SocketID)
+
+		case "erase":
+			if !onBoard(msg.X, msg.Y) || msg.Radius < 5 || msg.Radius > 60 {
+				continue
+			}
+			hub.EraseNear(msg.X, msg.Y, msg.Radius)
+			hub.Broadcast(EraseMessage{
+				MessageType: "erase",
+				Username:    c.Username,
+				X:           msg.X,
+				Y:           msg.Y,
+				Radius:      msg.Radius,
+			}, c.SocketID)
 		}
 		// Unknown message types are ignored
 	}
